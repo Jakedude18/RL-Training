@@ -1,6 +1,6 @@
-## Training
+## RL-Training
 
-Training contains two directories:
+RL-Training contains two directories:
 
 ### Agent
 - **train.py**  

@@ -1,44 +1,16 @@
 from stable_baselines3 import DQN
+from stable_baselines3 import SAC
 from stable_baselines3.common.vec_env import DummyVecEnv
-from stable_baselines3.common.callbacks import BaseCallback
+
 import numpy as np
 import torch
 
 from wheelChairEnv import WheelChairEnv
+from trainingCallBack import TrainingMonitorCallback
 
-# ==========================
-# Custom callback for logging
-# ==========================
-class TrainingMonitorCallback(BaseCallback):
-    def __init__(self, verbose=1):
-        super().__init__(verbose)
-        self.episode_rewards = []
-        self.episode_lengths = []
-        self.current_rewards = 0
-        self.current_length = 0
 
-    def _on_step(self) -> bool:
-        # Increment reward and length per step
-        self.current_rewards += self.locals.get("rewards", 0)
-        self.current_length += 1
 
-        # Check if episode ended
-        done_array = self.locals.get("dones", None)
-        if done_array is not None and done_array.any():
-            self.episode_rewards.append(self.current_rewards)
-            self.episode_lengths.append(self.current_length)
-            if self.verbose > 0:
-                avg_reward = np.mean(self.episode_rewards[-10:])
-                avg_len = np.mean(self.episode_lengths[-10:])
-                print(f"Episode finished. Avg reward (last 10): {avg_reward:.2f}, Avg length: {avg_len:.2f}")
-            self.current_rewards = 0
-            self.current_length = 0
-        return True
-
-# ==========================
-# Wrap environment for SB3
-# ==========================
-env = DummyVecEnv([lambda: WheelChairEnv(simulation=False)])
+env = DummyVecEnv([lambda: WheelChairEnv(simulation=False, max_steps=100)])
 
 # ==========================
 # Create DQN model
@@ -46,15 +18,16 @@ env = DummyVecEnv([lambda: WheelChairEnv(simulation=False)])
 model = DQN(
     "MlpPolicy",
     env,
-    learning_rate=0.1,
+    learning_rate=0.00021680265991082557,
     buffer_size=10000,
     learning_starts=100,
     batch_size=64,
-    tau=0.05,
-    gamma=0.95,
+    tau=0.046649157305473865,
+    gamma=0.9072691785468209,
     verbose=1,
     exploration_initial_eps=1.0,
     exploration_final_eps=0.01,
+    exploration_fraction=0.4817159675707373,  # decay over fraction% of timesteps
     policy_kwargs={"net_arch": [64, 64]},
 )
 
@@ -62,17 +35,11 @@ model = DQN(
 # Train with callback
 # ==========================
 callback = TrainingMonitorCallback(verbose=1)
-model.learn(total_timesteps=150, callback=callback)
+model.learn(total_timesteps=1000, callback=callback)
 
 # ==========================
 # Evaluate policy on all states
 # ==========================
-def decode_action(action_idx):
-    """Flat action 0-26 → [left, right, lift] in {-1,0,1}"""
-    left = action_idx // 9
-    right = (action_idx % 9) // 3
-    lift = action_idx % 3
-    return [left - 1, right - 1, lift - 1]
 
 # Generate all possible states
 all_states = []
@@ -87,10 +54,19 @@ with torch.no_grad():
     q_values = model.q_net(torch.tensor(all_states))
     best_actions = torch.argmax(q_values, dim=1).numpy()
 
+
+def decode_action(action_idx):
+    """Flat action 0-26 → [left, right, lift] in {-1,0,1}"""
+    left = action_idx // 9
+    right = (action_idx % 9) // 3
+    lift = action_idx % 3
+    return [left - 1, right - 1, lift - 1]
+
+
 # Print best action per state
 for state, action_idx in zip(all_states, best_actions):
     action = decode_action(action_idx)
-    print(f"State {state.astype(int)} -> Best Action {[int(x) for x in action]}")
+    # print(f"State {state.astype(int)} -> Best Action {[int(x) for x in action]}")
 
 
 

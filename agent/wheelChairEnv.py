@@ -15,8 +15,11 @@ class WheelChairEnv(gym.Env):
 
     metadata = {"render_modes": ["human"], "render_fps": 10}
 
-    def __init__(self, simulation=False, port=None, baudrate=115200, timeout=1):
+    def __init__(self, simulation=False, port=None, baudrate=115200, timeout=1, max_steps=None):
         super().__init__()
+
+        self.max_steps = max_steps or 100 
+
         self.simulation = simulation
 
         # Observation space: left, right, lift positions
@@ -65,12 +68,16 @@ class WheelChairEnv(gym.Env):
         lift = action_idx % 3
         return np.array([left - 1, right - 1, lift - 1], dtype=np.int64)
 
+    # Have we reached the scooped position
+    def is_goal_state(self, state):
+        # Return True if this is your terminal/reward state
+        return (state[:2] == TARGET).all()
+
     # =======================
     # Step function
     # =======================
-    def step(self, action):
-        self.step_count += 1
-        truncated = self.step_count >= 100
+    def step(self, action):        
+
         
         self.prev_state = self.state.copy()
 
@@ -123,13 +130,17 @@ class WheelChairEnv(gym.Env):
         reward = (prev_dist - new_dist)
 
         # Success bonus
-        if (self.state[:2] == TARGET).all():
+        terminated = False
+        if self.is_goal_state(self.state):
             reward = 10.0
             terminated = True
-        else:
-            terminated = False
-        print(self.state)
-        return self.state, reward, terminated, truncated, {}
+        
+        self.step_count += 1
+        truncated = self.step_count >= self.max_steps
+        info = {"is_success": terminated}
+
+        return self.state, reward, terminated, truncated, info
+
 
     # =======================
     # Actuator mapping
@@ -144,12 +155,14 @@ class WheelChairEnv(gym.Env):
     # =======================
     # Reset / Render
     # =======================
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None):
         self.step_count = 0
-        if options and "init_state" in options:
-            self.state = np.array(options["init_state"], dtype=np.int64)
-        else:
-            self.state = np.array([random.randint(0, 10) for _ in range(3)], dtype=np.int64)
+
+        #Random state
+        # self.state = np.array([random.randint(0, 10) for _ in range(3)], dtype=np.int64)
+
+        #Actuators start in the same state each time!
+        self.state = np.array([0,0,0])
 
         # Push the new state to the Teensy
         if not self.simulation and self.ser:

@@ -2,9 +2,13 @@
 
 RL-Training contains two directories:
 
-### Agent
+### Agent  
 - **train.py**  
   Master script that uses SB3 to train an agent in the Wheelchair Environment.
+  (Note there is no agent.py as SB3 usees a built in agent depnding on learning model)
+- **trainingCallBack**
+  Class that's passed to model to log resulting q-table and episode data
+  
 
 - **wheelChairEnv.py**  
   Contains code for the Wheelchair environment:
